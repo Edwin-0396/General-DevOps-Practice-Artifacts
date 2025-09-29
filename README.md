@@ -83,12 +83,16 @@ Once the prerequisites are satisfied, follow the walkthrough below.
    The script applies the manifests in `k8s/` and waits for the rollout to finish so you can immediately check pod status with `kubectl get pods`.
 
 4. **Provision AWS infrastructure (optional)**
-   ```bash
-   cd terraform
-   terraform init
-   terraform apply
-   ```
+
+  ```bash
+  cd terraform
+  terraform init
+  terraform apply
+  ```
+  Set variables (e.g., `-var="cluster_name=parameta-devops-mvp"`) as needed. Terraform creates an EKS cluster and networking; afterwards run `aws eks update-kubeconfig --name <cluster>` to target the new cluster.
+  > **Note:** The configuration pins the AWS provider to the 5.x series because the upstream EKS module has not yet adopted provider 6.x. If you already initialized this directory with an older lock file, rerun `terraform init -upgrade` (or delete `.terraform.lock.hcl`) so Terraform downloads a compatible provider version before planning or applying.
    Set variables (e.g., `-var="cluster_name=parameta-devops-mvp"`) as needed. Terraform creates an EKS cluster and networking; afterwards run `aws eks update-kubeconfig --name <cluster>` to target the new cluster.
+
 
 5. **Configure monitoring**
    - Deploy the Prometheus stack with the provided configuration to collect metrics from Kubernetes and the sample service.
