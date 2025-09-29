@@ -14,37 +14,117 @@ This repository contains a minimum viable platform that demonstrates the operati
 | `scripts/` | Helper scripts for operating the platform (e.g., deployment). |
 | `terraform/` | Infrastructure-as-Code that provisions an AWS EKS environment suitable for the MVP. |
 
-## Getting started
+## Prerequisites (zero cost)
 
-1. **Run unit tests locally**
+The following tools are free to install and provide everything you need to exercise the MVP locally without consuming paid cloud resources:
+
+1. **Python 3.11 or newer** – required for running the sample service and executing its unit tests.
+   ```bash
+   python3 --version
+   ```
+   Install via [python.org downloads](https://www.python.org/downloads/) or your package manager (`brew install python@3.11`, `sudo apt install python3.11`, etc.).
+
+2. **Docker** – builds and runs the container image locally, powers the optional Jenkins instance, and hosts monitoring tooling in containers.
+   ```bash
+   docker --version
+   ```
+   Follow the instructions for your platform in the [Docker Engine installation guide](https://docs.docker.com/engine/install/). Docker Desktop includes a lightweight Kubernetes distribution you can use instead of KIND.
+
+3. **kubectl** – required by the deployment script and for inspecting workloads.
+   ```bash
+   kubectl version --client
+   ```
+   Install using the [official Kubernetes instructions](https://kubernetes.io/docs/tasks/tools/).
+
+4. **Kubernetes in Docker (KIND)** – provisions a free, local Kubernetes cluster for end-to-end testing. Install via Homebrew, Chocolatey, or the project’s release tarballs:
+   ```bash
+   kind version
+   ```
+   <https://kind.sigs.k8s.io/docs/user/quick-start/>
+
+5. **(Optional) Jenkins** – the open-source controller can run locally in Docker when you want to demonstrate the CI/CD pipeline:
+   ```bash
+   docker run --rm -p 8080:8080 -p 50000:50000 jenkins/jenkins:lts-jdk17
+   ```
+
+Once the tooling is in place, follow the zero-cost walkthrough below.
+
+## Zero-cost end-to-end walkthrough
+
+1. **Clone the repository and install Python dependencies**
+   ```bash
+   git clone https://github.com/parameta/General-DevOps-Practice-Artifacts.git
+   cd General-DevOps-Practice-Artifacts
+   python -m pip install -r requirements.txt
+   ```
+
+2. **Run unit tests locally**
    ```bash
    python -m unittest discover -s app/tests
    ```
+   This confirms the HTTP handlers respond correctly before you build or deploy the service.
 
-2. **Build and run the container**
+3. **Build the Docker image**
    ```bash
    docker build -t parameta/devops-mvp:local .
-   docker run --rm -p 8000:8000 parameta/devops-mvp:local
    ```
-   Access the application at `http://localhost:8000/` and the health endpoint at `http://localhost:8000/healthz`.
 
-3. **Deploy to Kubernetes**
+4. **Create a free Kubernetes cluster with KIND**
    ```bash
+   kind create cluster --name parameta-mvp
+   kind get clusters
+   ```
+   KIND automatically configures your kubeconfig so `kubectl` targets the new cluster.
+
+5. **Load the image into KIND and deploy the workload**
+   ```bash
+   kind load docker-image parameta/devops-mvp:local --name parameta-mvp
    ./scripts/deploy.sh parameta/devops-mvp:local
    ```
    The script applies the manifests in `k8s/` and waits for the rollout to finish.
 
-4. **Provision AWS infrastructure**
+6. **Validate the application end-to-end**
    ```bash
-   cd terraform
-   terraform init
-   terraform apply
+   kubectl get pods
+   kubectl port-forward deployment/parameta-devops-mvp 8000:8000
+   curl http://localhost:8000/
+   curl http://localhost:8000/healthz
    ```
-   This creates an EKS cluster with supporting networking suitable for staging and production workloads.
+   Port-forwarding exposes the service locally so you can demonstrate request/response flows without an ingress controller.
 
-5. **Configure monitoring**
-   - Deploy the Prometheus stack with the provided configuration to collect metrics from Kubernetes and the sample service.
-   - Import the Grafana dashboard located at `monitoring/grafana/dashboard.json` to visualize replica counts, error rates, and resource usage.
+7. **Add free monitoring with Prometheus and Grafana containers**
+   ```bash
+   docker run --rm -d --name prometheus -p 9090:9090 \
+     -v "$PWD/monitoring/prometheus/prometheus.yaml:/etc/prometheus/prometheus.yml" \
+     -v "$PWD/monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml" \
+     -v "$HOME/.kube/config:/kubeconfig" -e KUBECONFIG=/kubeconfig prom/prometheus
+   docker run --rm -d --name grafana -p 3000:3000 \
+     -e GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/mvp.json \
+     -v "$PWD/monitoring/grafana/dashboard.json:/var/lib/grafana/dashboards/mvp.json" grafana/grafana-oss
+   ```
+   * Replace `$HOME/.kube/config` with the path to your kubeconfig if it lives elsewhere. Mounting it lets Prometheus' Kubernetes service discovery authenticate to the KIND API server without extra components.
+   * Log in to Grafana at <http://localhost:3000> (default credentials `admin` / `admin`) and add Prometheus (`http://host.docker.internal:9090` on macOS/Windows or `http://172.17.0.1:9090` on Linux) as a data source to visualize the bundled dashboard.
+
+8. **(Optional) Demonstrate the Jenkins pipeline locally**
+   ```bash
+   docker run --rm -d --name jenkins -p 8080:8080 -p 50000:50000 \
+     -v jenkins_home:/var/jenkins_home jenkins/jenkins:lts-jdk17
+   ```
+   * Install the Docker and Kubernetes CLI plugins from the Jenkins UI.
+   * Create credentials named `docker-registry-credentials` (Username/Password) and `kubeconfig-eks-cluster` (Secret file that points to `~/.kube/config`).
+   * Create a pipeline job pointing at this repository; Jenkins will build, test, and deploy to the KIND cluster exactly as the scripted walkthrough did.
+
+9. **Tear everything down for a clean exit**
+   ```bash
+   kind delete cluster --name parameta-mvp
+   docker stop prometheus grafana jenkins
+   docker volume rm jenkins_home
+   ```
+   No cloud resources are provisioned in this workflow, so there are no ongoing costs.
+
+## Optional AWS expansion
+
+When you are ready to present a managed-cloud deployment, use the Terraform module under `terraform/` to create the AWS networking and EKS resources. This step is not required for a free demonstration and will incur charges in your AWS account. Review the [Terraform README](terraform/README.md) for full instructions.
 
 ## Continuous Delivery workflow
 
