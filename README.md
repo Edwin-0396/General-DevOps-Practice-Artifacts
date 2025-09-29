@@ -14,7 +14,7 @@ This repository contains a minimum viable platform that demonstrates the operati
 | `scripts/` | Helper scripts for operating the platform (e.g., deployment). |
 | `terraform/` | Infrastructure-as-Code that provisions an AWS EKS environment suitable for the MVP. |
 
-## Prerequisites (zero cost)
+
 
 The following tools are free to install and provide everything you need to exercise the MVP locally without consuming paid cloud resources:
 
@@ -67,7 +67,7 @@ Once the tooling is in place, follow the zero-cost walkthrough below.
 3. **Build the Docker image**
    ```bash
    docker build -t parameta/devops-mvp:local .
-   ```
+
 
 4. **Create a free Kubernetes cluster with KIND**
    ```bash
@@ -81,48 +81,19 @@ Once the tooling is in place, follow the zero-cost walkthrough below.
    kind load docker-image parameta/devops-mvp:local --name parameta-mvp
    ./scripts/deploy.sh parameta/devops-mvp:local
    ```
-   The script applies the manifests in `k8s/` and waits for the rollout to finish.
+   The script applies the manifests in `k8s/` and waits for the rollout to finish so you can immediately check pod status with `kubectl get pods`.
 
-6. **Validate the application end-to-end**
-   ```bash
-   kubectl get pods
-   kubectl port-forward deployment/parameta-devops-mvp 8000:8000
-   curl http://localhost:8000/
-   curl http://localhost:8000/healthz
-   ```
-   Port-forwarding exposes the service locally so you can demonstrate request/response flows without an ingress controller.
+4. **Provision AWS infrastructure (optional)**
 
-7. **Add free monitoring with Prometheus and Grafana containers**
-   ```bash
-   docker run --rm -d --name prometheus -p 9090:9090 \
-     -v "$PWD/monitoring/prometheus/prometheus.yaml:/etc/prometheus/prometheus.yml" \
-     -v "$PWD/monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml" \
-     -v "$HOME/.kube/config:/kubeconfig" -e KUBECONFIG=/kubeconfig prom/prometheus
-   docker run --rm -d --name grafana -p 3000:3000 \
-     -e GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/mvp.json \
-     -v "$PWD/monitoring/grafana/dashboard.json:/var/lib/grafana/dashboards/mvp.json" grafana/grafana-oss
-   ```
-   * Replace `$HOME/.kube/config` with the path to your kubeconfig if it lives elsewhere. Mounting it lets Prometheus' Kubernetes service discovery authenticate to the KIND API server without extra components.
-   * Log in to Grafana at <http://localhost:3000> (default credentials `admin` / `admin`) and add Prometheus (`http://host.docker.internal:9090` on macOS/Windows or `http://172.17.0.1:9090` on Linux) as a data source to visualize the bundled dashboard.
+  ```bash
+  cd terraform
+  terraform init
+  terraform apply
+  ```
+  Set variables (e.g., `-var="cluster_name=parameta-devops-mvp"`) as needed. Terraform creates an EKS cluster and networking; afterwards run `aws eks update-kubeconfig --name <cluster>` to target the new cluster.
+  > **Note:** The configuration pins the AWS provider to the 5.x series because the upstream EKS module has not yet adopted provider 6.x. If you already initialized this directory with an older lock file, rerun `terraform init -upgrade` (or delete `.terraform.lock.hcl`) so Terraform downloads a compatible provider version before planning or applying.
+   Set variables (e.g., `-var="cluster_name=parameta-devops-mvp"`) as needed. Terraform creates an EKS cluster and networking; afterwards run `aws eks update-kubeconfig --name <cluster>` to target the new cluster.
 
-8. **(Optional) Demonstrate the Jenkins pipeline locally**
-   ```bash
-   docker run --rm -d --name jenkins -p 8080:8080 -p 50000:50000 \
-     -v jenkins_home:/var/jenkins_home jenkins/jenkins:lts-jdk17
-   ```
-   * Install the Docker and Kubernetes CLI plugins from the Jenkins UI.
-   * Create credentials named `docker-registry-credentials` (Username/Password) and `kubeconfig-eks-cluster` (Secret file that points to `~/.kube/config`).
-   * Create a pipeline job pointing at this repository; Jenkins will build, test, and deploy to the KIND cluster exactly as the scripted walkthrough did.
-
-9. **Tear everything down for a clean exit**
-   ```bash
-   kind delete cluster --name parameta-mvp
-   docker stop prometheus grafana jenkins
-   docker volume rm jenkins_home
-   ```
-   No cloud resources are provisioned in this workflow, so there are no ongoing costs.
-
-## Optional AWS expansion
 
 When you are ready to present a managed-cloud deployment, use the Terraform module under `terraform/` to create the AWS networking and EKS resources. This step is not required for a free demonstration and will incur charges in your AWS account. Review the [Terraform README](terraform/README.md) for full instructions.
 
