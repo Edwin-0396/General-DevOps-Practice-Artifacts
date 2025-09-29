@@ -5,6 +5,11 @@ metadata:
   labels:
     app: parameta-devops-mvp
 spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   replicas: 2
   selector:
     matchLabels:
@@ -14,11 +19,21 @@ spec:
       labels:
         app: parameta-devops-mvp
     spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        runAsNonRoot: true
       containers:
         - name: app
           image: parameta/devops-mvp:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
+          env:
+            - name: APP_PORT
+              value: "8000"
           readinessProbe:
             httpGet:
               path: /healthz
@@ -38,6 +53,12 @@ spec:
             limits:
               cpu: 250m
               memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
 ---
 apiVersion: v1
 kind: Service

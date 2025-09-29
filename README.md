@@ -55,14 +55,15 @@ Once the tooling is in place, follow the zero-cost walkthrough below.
    ```bash
    git clone https://github.com/parameta/General-DevOps-Practice-Artifacts.git
    cd General-DevOps-Practice-Artifacts
-   python -m pip install -r requirements.txt
+   python -m pip install -r requirements.txt -r requirements-dev.txt
    ```
 
-2. **Run unit tests locally**
+2. **Run quality gates locally**
    ```bash
-   python -m unittest discover -s app/tests
+   flake8 app app/tests
+   pytest
    ```
-   This confirms the HTTP handlers respond correctly before you build or deploy the service.
+   Static analysis (flake8) and the unit tests (pytest with coverage) confirm the HTTP handlers respond correctly before you build or deploy the service.
 
 3. **Build the Docker image**
    ```bash
@@ -81,7 +82,7 @@ Once the tooling is in place, follow the zero-cost walkthrough below.
    kind load docker-image parameta/devops-mvp:local --name parameta-mvp
    ./scripts/deploy.sh parameta/devops-mvp:local
    ```
-   The script applies the manifests in `k8s/` and waits for the rollout to finish so you can immediately check pod status with `kubectl get pods`.
+   The script applies the manifests in `k8s/` (deployment, service, and PodDisruptionBudget) and waits for the rollout to finish so you can immediately check pod status with `kubectl get pods`.
 
 4. **Provision AWS infrastructure (optional)**
 
@@ -102,9 +103,10 @@ When you are ready to present a managed-cloud deployment, use the Terraform modu
 The Jenkins pipeline performs the following actions:
 
 1. Checks out the repository source.
-2. Runs the Python unit test suite.
-3. Builds and pushes the workload container image to the configured registry.
-4. Deploys the latest image to the Kubernetes cluster using `kubectl` with stored credentials.
+2. Installs the runtime and development Python dependencies.
+3. Runs static analysis (flake8) and the pytest suite with coverage reporting.
+4. Builds and pushes the workload container image to the configured registry.
+5. Deploys the latest image to the Kubernetes cluster using `kubectl` with stored credentials when building from the `main` branch.
 
 This workflow can be extended with environment-specific deployment stages, security scanning, or integration test gates.
 
@@ -113,5 +115,7 @@ This workflow can be extended with environment-specific deployment stages, secur
 - **Prometheus** scrapes the Kubernetes control plane and the application pods, storing time-series metrics and firing alerts through Alertmanager when replica availability or error rate thresholds are exceeded.
 - **Grafana** surfaces those metrics via a prebuilt dashboard to aid troubleshooting and capacity planning.
 - **scripts/deploy.sh** provides a repeatable mechanism to update workloads while waiting for rollout completion, ensuring stability across Linux-based environments.
+- The application exposes configuration via the `APP_HOST`, `APP_PORT`, and `LOG_LEVEL` environment variables and logs lifecycle events to aid troubleshooting.
+- The Kubernetes manifests enforce non-root execution, read-only filesystems, a PodDisruptionBudget, and rolling update parameters so the workload behaves predictably during operational maintenance.
 
 The combination of automation, infrastructure provisioning, monitoring, and operational scripts delivers a functional MVP that aligns with the Parameta role requirements.
