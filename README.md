@@ -14,11 +14,9 @@ This repository contains a minimum viable platform that demonstrates the operati
 | `scripts/` | Helper scripts for operating the platform (e.g., deployment). |
 | `terraform/` | Infrastructure-as-Code that provisions an AWS EKS environment suitable for the MVP. |
 
-## Prerequisites
 
-Before running the MVP, make sure your workstation or CI agent satisfies the following requirements:
 
-### Tooling
+The following tools are free to install and provide everything you need to exercise the MVP locally without consuming paid cloud resources:
 
 1. **Python 3.11 or newer** – required for running the sample service and executing its unit tests.
    ```bash
@@ -26,58 +24,61 @@ Before running the MVP, make sure your workstation or CI agent satisfies the fol
    ```
    Install via [python.org downloads](https://www.python.org/downloads/) or your package manager (`brew install python@3.11`, `sudo apt install python3.11`, etc.).
 
-2. **Docker** – used to build and run the container image locally and inside the Jenkins pipeline.
+2. **Docker** – builds and runs the container image locally, powers the optional Jenkins instance, and hosts monitoring tooling in containers.
    ```bash
    docker --version
    ```
-   Follow the instructions for your platform in the [Docker Engine installation guide](https://docs.docker.com/engine/install/).
+   Follow the instructions for your platform in the [Docker Engine installation guide](https://docs.docker.com/engine/install/). Docker Desktop includes a lightweight Kubernetes distribution you can use instead of KIND.
 
-3. **kubectl** – required to interact with Kubernetes clusters and for the deployment script.
+3. **kubectl** – required by the deployment script and for inspecting workloads.
    ```bash
    kubectl version --client
    ```
    Install using the [official Kubernetes instructions](https://kubernetes.io/docs/tasks/tools/).
 
-4. **Terraform** – provisions the AWS networking and EKS cluster defined under `terraform/`.
+4. **Kubernetes in Docker (KIND)** – provisions a free, local Kubernetes cluster for end-to-end testing. Install via Homebrew, Chocolatey, or the project’s release tarballs:
    ```bash
-   terraform -version
+   kind version
    ```
-   Download from [terraform.io](https://www.terraform.io/downloads) or use a package manager (`brew tap hashicorp/tap && brew install hashicorp/tap/terraform`, `choco install terraform`, etc.).
+   <https://kind.sigs.k8s.io/docs/user/quick-start/>
 
-### Credentials and access
+5. **(Optional) Jenkins** – the open-source controller can run locally in Docker when you want to demonstrate the CI/CD pipeline:
+   ```bash
+   docker run --rm -p 8080:8080 -p 50000:50000 jenkins/jenkins:lts-jdk17
+   ```
 
-* **AWS credentials** with permissions to create VPC, IAM, EKS, and supporting resources. Export them as environment variables or configure them via the AWS CLI before running Terraform:
-  ```bash
-  export AWS_ACCESS_KEY_ID=...
-  export AWS_SECRET_ACCESS_KEY=...
-  export AWS_DEFAULT_REGION=us-east-1
-  ```
+Once the tooling is in place, follow the zero-cost walkthrough below.
 
-* **Container registry access** where Docker can push/pull the image tag you want to use (for example Amazon ECR, Docker Hub, or a private registry). Update the image references in `scripts/deploy.sh` and the Jenkinsfile if you need a fully qualified registry path.
+## Zero-cost end-to-end walkthrough
 
-* **Kubernetes cluster credentials** (`kubeconfig`) for the environment where you will deploy the workload. You can supply these manually or generate them after provisioning the EKS cluster with Terraform.
+1. **Clone the repository and install Python dependencies**
+   ```bash
+   git clone https://github.com/parameta/General-DevOps-Practice-Artifacts.git
+   cd General-DevOps-Practice-Artifacts
+   python -m pip install -r requirements.txt
+   ```
 
-* **Jenkins credentials** (optional) to run the provided pipeline: create a Docker registry credential named `docker-registry-credentials` and a Kubernetes config file credential named `kubeconfig-eks-cluster`.
-
-Once the prerequisites are satisfied, follow the walkthrough below.
-
-## Getting started
-
-1. **Run unit tests locally**
+2. **Run unit tests locally**
    ```bash
    python -m unittest discover -s app/tests
    ```
    This confirms the HTTP handlers respond correctly before you build or deploy the service.
 
-2. **Build and run the container**
+3. **Build the Docker image**
    ```bash
    docker build -t parameta/devops-mvp:local .
-   docker run --rm -p 8000:8000 parameta/devops-mvp:local
-   ```
-   Access the application at `http://localhost:8000/` and the health endpoint at `http://localhost:8000/healthz` to validate the container.
 
-3. **Deploy to Kubernetes**
+
+4. **Create a free Kubernetes cluster with KIND**
    ```bash
+   kind create cluster --name parameta-mvp
+   kind get clusters
+   ```
+   KIND automatically configures your kubeconfig so `kubectl` targets the new cluster.
+
+5. **Load the image into KIND and deploy the workload**
+   ```bash
+   kind load docker-image parameta/devops-mvp:local --name parameta-mvp
    ./scripts/deploy.sh parameta/devops-mvp:local
    ```
    The script applies the manifests in `k8s/` and waits for the rollout to finish so you can immediately check pod status with `kubectl get pods`.
@@ -94,9 +95,7 @@ Once the prerequisites are satisfied, follow the walkthrough below.
    Set variables (e.g., `-var="cluster_name=parameta-devops-mvp"`) as needed. Terraform creates an EKS cluster and networking; afterwards run `aws eks update-kubeconfig --name <cluster>` to target the new cluster.
 
 
-5. **Configure monitoring**
-   - Deploy the Prometheus stack with the provided configuration to collect metrics from Kubernetes and the sample service.
-   - Import the Grafana dashboard located at `monitoring/grafana/dashboard.json` to visualize replica counts, error rates, and resource usage.
+When you are ready to present a managed-cloud deployment, use the Terraform module under `terraform/` to create the AWS networking and EKS resources. This step is not required for a free demonstration and will incur charges in your AWS account. Review the [Terraform README](terraform/README.md) for full instructions.
 
 ## Continuous Delivery workflow
 

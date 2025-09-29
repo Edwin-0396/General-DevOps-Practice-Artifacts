@@ -6,6 +6,8 @@ This Terraform module provisions the core infrastructure required to run the Par
 - An EKS cluster with a managed node group sized for test and production workloads.
 - A Kubernetes provider configuration ready to apply platform add-ons (e.g., monitoring stack).
 
+> **Cost notice:** Running `terraform apply` will create chargeable AWS resources. The main walkthrough in the repository shows how to exercise the MVP entirely for free using KIND; only invoke this module when you intentionally want to demo the managed-cloud footprint.
+
 ## Usage
 
 ```bash
